@@ -164,8 +164,8 @@ Ref Fresh will make that `$(my_git_prompt)` call happen again when another
 terminal changes the repository. The plugin does not decide what `my_git_prompt`
 returns.
 
-For a full prompt example, see
-[grayt.zsh-theme](https://github.com/evanthegrayt/grayt-zsh-theme/blob/master/grayt.zsh-theme).
+For a full prompt example, see [my personal
+theme](https://github.com/evanthegrayt/grayt-zsh-theme/blob/master/grayt.zsh-theme).
 
 If your prompt only calculates Git state in a `precmd` hook and stores it in a
 variable, a prompt reset may redraw the old cached value. In that case, move the
@@ -180,3 +180,8 @@ prompt redraw. The most direct pattern is a function called while rendering
 
 Because Ref Fresh only triggers redraws, your prompt remains responsible for
 deciding what to show.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development notes, project boundaries,
+and test commands.
