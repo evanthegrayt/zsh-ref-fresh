@@ -34,6 +34,15 @@ Ref Fresh never renders prompt content, calculates Git status, selects prompt
 colors, or caches branch names. Any prompt that recalculates Git state during a
 redraw can consume it.
 
+No Git information is passed from Ref Fresh to the prompt. The redraw is the
+interface. A compatible prompt recalculates its own Git state when `PROMPT` or
+`RPROMPT` is re-expanded, commonly through `prompt_subst` and a function call
+such as `$(my_git_prompt)`.
+
+Prompts that only update Git state in `precmd` may keep showing a cached value
+after `zle .reset-prompt`, because prompt reset should be treated as
+re-expansion/redraw rather than a full new prompt lifecycle.
+
 ## Attribution
 
 Portions of the repository watcher logic are adapted from Cobalt Spark's Live
