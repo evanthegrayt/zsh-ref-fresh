@@ -1,4 +1,11 @@
 #!/usr/bin/env zsh
+##
+# @file smoke.zsh
+# @brief Smoke tests for Ref Fresh.
+# @description
+#     Runs a small interactive zsh test harness that validates disabled mode,
+#     missing fswatch behavior, fake fswatch watcher startup, same-repository
+#     reuse, leaving a repository, switching repositories, and explicit cleanup.
 
 if [[ ! -o interactive ]]; then
   exec zsh -fi "$0" "$@"
@@ -13,6 +20,9 @@ typeset -r temp_dir="$(command mktemp -d "${TMPDIR:-/tmp}/ref-fresh-smoke.XXXXXX
 typeset -r fake_bin="$temp_dir/bin"
 typeset -r fake_log="$temp_dir/fswatch.log"
 
+##
+# @description Stop the active watcher and remove temporary test files.
+# @exitcode 0 Always succeeds.
 function cleanup() {
   (( ${+functions[ref_fresh_stop]} )) && ref_fresh_stop
   command rm -rf -- "$temp_dir"
@@ -20,15 +30,36 @@ function cleanup() {
 
 trap cleanup EXIT
 
+##
+# @description Print a passing test line.
+#
+# @arg $1 string Test description.
+# @stdout TAP-style passing test line.
+# @exitcode 0 Always succeeds.
 function pass() {
   print -r -- "ok - $1"
 }
 
+##
+# @description Print a failing test line and return a failure status.
+#
+# @arg $1 string Failure description.
+# @stderr TAP-style failing test line.
+# @exitcode 1 Always fails.
 function fail() {
   print -ru2 -- "not ok - $1"
   return 1
 }
 
+##
+# @description Assert that two strings are equal.
+#
+# @arg $1 string Expected value.
+# @arg $2 string Actual value.
+# @arg $3 string Assertion label.
+# @stderr Failure details when values differ.
+# @exitcode 0 Values are equal.
+# @exitcode 1 Values differ.
 function assert_eq() {
   local want="$1"
   local got="$2"
@@ -37,6 +68,14 @@ function assert_eq() {
   [[ "$want" == "$got" ]] || fail "$label: expected '$want', got '$got'"
 }
 
+##
+# @description Assert that a command succeeds.
+#
+# @arg $1 string Assertion label.
+# @arg $@ string Command and arguments to run.
+# @stderr Failure details when the command fails.
+# @exitcode 0 Command succeeds.
+# @exitcode 1 Command fails.
 function assert_true() {
   local label="$1"
   shift
@@ -44,6 +83,13 @@ function assert_true() {
   "$@" || fail "$label"
 }
 
+##
+# @description Assert that Ref Fresh has no active watcher.
+#
+# @arg $1 string Assertion label.
+# @stderr Failure details when watcher state is still active.
+# @exitcode 0 No watcher is active.
+# @exitcode 1 Watcher state is active or inconsistent.
 function assert_no_watcher() {
   local label="$1"
 
@@ -52,6 +98,13 @@ function assert_no_watcher() {
   assert_eq "" "$__ref_fresh_root" "$label root"
 }
 
+##
+# @description Assert that Ref Fresh has an active watcher process.
+#
+# @arg $1 string Assertion label.
+# @stderr Failure details when watcher state is inactive or inconsistent.
+# @exitcode 0 A watcher is active.
+# @exitcode 1 No watcher is active or watcher state is inconsistent.
 function assert_watcher_alive() {
   local label="$1"
 
@@ -60,6 +113,12 @@ function assert_watcher_alive() {
   (( __ref_fresh_events_fd >= 0 )) || fail "$label fd not set"
 }
 
+##
+# @description Create an empty Git repository for smoke testing.
+#
+# @arg $1 string Repository directory path.
+# @exitcode 0 Repository was created.
+# @exitcode non-zero Directory creation or `git init` failed.
 function make_repo() {
   local dir="$1"
 
@@ -68,6 +127,16 @@ function make_repo() {
   command git init -q
 }
 
+##
+# @description Install a fake fswatch executable earlier in PATH.
+#
+# The fake process records its invocation, traps termination, and sleeps until
+# Ref Fresh stops the watcher.
+#
+# @set fake_bin string Directory containing the fake executable.
+# @set fake_log string File where fake fswatch invocations are recorded.
+# @exitcode 0 Fake executable was created.
+# @exitcode non-zero Fake executable setup failed.
 function install_fake_fswatch() {
   command mkdir -p -- "$fake_bin"
   {
@@ -99,6 +168,14 @@ ref_fresh_check_pwd
 assert_no_watcher "disabled"
 pass "disabled config starts no watcher"
 
+##
+# @description Override command lookup to simulate missing fswatch.
+#
+# @arg $@ string Arguments passed to `whence`.
+# @stdout Delegated output from the builtin for commands other than fswatch.
+# @stderr Delegated errors from the builtin for commands other than fswatch.
+# @exitcode 1 The requested command is fswatch.
+# @exitcode non-zero Delegated status from builtin `whence` for other commands.
 function whence() {
   if [[ "${@: -1}" == fswatch ]]; then
     return 1
