@@ -71,13 +71,36 @@ evanthegrayt/zsh-reffresh
 
 Then rebuild your antidote bundle.
 
-## Configure
+## Setup
+
+Set configuration variables in your zsh startup file before Ref Fresh loads when
+you can. If you install Ref Fresh with a plugin manager, the plugin manager
+sources the plugin for you; do not also source `ref-fresh.zsh` manually.
+
+For a manual install, set variables and then source the plugin:
 
 ```zsh
 REF_FRESH_ENABLE=1
 REF_FRESH_LATENCY=0.5
 source /path/to/ref-fresh/ref-fresh.zsh
 ```
+
+For a plugin manager, put the variables before the manager loads Ref Fresh:
+
+```zsh
+REF_FRESH_ENABLE=1
+REF_FRESH_LATENCY=0.5
+
+# Your plugin manager loads evanthegrayt/zsh-reffresh here.
+```
+
+Most configuration is read dynamically. If you set `REF_FRESH_ENABLE=0` after
+Ref Fresh has already loaded, the active watcher stops on the next prompt check.
+If you set it back to `1`, watching resumes on the next prompt check.
+
+`REF_FRESH_LATENCY` is read when a watcher starts. If you change latency while a
+watcher is already running, call `ref_fresh_restart` or wait until you enter a
+different repository.
 
 Configuration uses environment variables:
 
