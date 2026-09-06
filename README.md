@@ -29,8 +29,6 @@ If `fswatch` is not installed, Ref Fresh quietly does nothing.
 ### Manual
 
 ```zsh
-REF_FRESH_ENABLE=1
-REF_FRESH_LATENCY=0.5
 source /path/to/ref-fresh/ref-fresh.zsh
 ```
 
@@ -61,21 +59,14 @@ zinit light evanthegrayt/zsh-reffresh
 zplug "evanthegrayt/zsh-reffresh"
 ```
 
-### antidote
-
-Add this to your bundle file:
-
-```text
-evanthegrayt/zsh-reffresh
-```
-
-Then rebuild your antidote bundle.
+### Other
+...or use your other favorite manager's instructions.
 
 ## Setup
 
 Set configuration variables in your zsh startup file before Ref Fresh loads when
 you can. If you install Ref Fresh with a plugin manager, the plugin manager
-sources the plugin for you; do not also source `ref-fresh.zsh` manually.
+usually sources the plugin for you; do not also source `ref-fresh.zsh` manually.
 
 For a manual install, set variables and then source the plugin:
 
