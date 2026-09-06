@@ -37,7 +37,7 @@ source /path/to/ref-fresh/ref-fresh.zsh
 Clone this repository into your custom plugins directory:
 
 ```zsh
-git clone https://github.com/evanthegrayt/zsh-reffresh \
+git clone https://github.com/evanthegrayt/zsh-ref-fresh \
   ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/ref-fresh
 ```
 
@@ -50,13 +50,13 @@ plugins=(... ref-fresh)
 ### zinit
 
 ```zsh
-zinit light evanthegrayt/zsh-reffresh
+zinit light evanthegrayt/zsh-ref-fresh
 ```
 
 ### zplug
 
 ```zsh
-zplug "evanthegrayt/zsh-reffresh"
+zplug "evanthegrayt/zsh-ref-fresh"
 ```
 
 ### Other
@@ -82,7 +82,7 @@ For a plugin manager, put the variables before the manager loads Ref Fresh:
 REF_FRESH_ENABLE=1
 REF_FRESH_LATENCY=0.5
 
-# Your plugin manager loads evanthegrayt/zsh-reffresh here.
+# Your plugin manager loads evanthegrayt/zsh-ref-fresh here.
 ```
 
 Most configuration is read dynamically. If you set `REF_FRESH_ENABLE=0` after
