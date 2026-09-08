@@ -6,17 +6,17 @@ updates refs, Ref Fresh asks zsh to redraw the current prompt so your existing
 prompt logic can recalculate Git state.
 
 It does not render a prompt, choose a branch format, calculate dirty state, or
-cache Git status. It only watches the current repository and calls
-`zle .reset-prompt` after repository filesystem changes.
-
-Ref Fresh was inspired by [Cobalt
-Spark's](https://github.com/azhuchkov/cobalt-spark) Live Git updates.
+cache Git status. It only watches the current repository and calls `zle
+.reset-prompt` after repository filesystem changes. If you're interested in a
+full prompt, you can check out [my personal
+theme](https://github.com/evanthegrayt/grayt-zsh-theme). Just be aware you'll
+still need this plugin for live updates to work.
 
 ## Requirements
 
-- zsh
-- Git
-- [`fswatch`](https://github.com/emcrisostomo/fswatch)
+- [Zsh](https://www.zsh.org/)
+- [Git](https://git-scm.com/)
+- [fswatch](https://github.com/emcrisostomo/fswatch)
 
 Ref Fresh uses one `fswatch` process per current repository per shell. It watches
 the worktree root, plus Git metadata directories when they live outside the
@@ -64,30 +64,40 @@ zplug "evanthegrayt/zsh-ref-fresh"
 
 ## Setup
 
-Set configuration variables in your zsh startup file before Ref Fresh loads when
-you can. If you install Ref Fresh with a plugin manager, the plugin manager
-usually sources the plugin for you; do not also source `zsh-ref-fresh.zsh` manually.
+Ref Fresh starts automatically by default as soon as it is sourced. You do not
+need to set `REF_FRESH_AUTO_START=1` for normal use.
 
-For a manual install, set variables and then source the plugin:
+Set `REF_FRESH_AUTO_START=0` before sourcing the plugin when you want the
+functions available but do not want watchers to start until you run
+`ref_fresh_start` yourself.
+
+Set optional configuration variables in your zsh startup file before Ref Fresh
+loads when you can. If you install Ref Fresh with a plugin manager, the plugin
+manager usually sources the plugin for you; do not also source
+`zsh-ref-fresh.zsh` manually.
+
+For a manual install, set any optional variables and then source the plugin:
 
 ```zsh
-REF_FRESH_ENABLE=1
-REF_FRESH_LATENCY=0.5
+# Optional: change the default 0.5 second fswatch latency.
+REF_FRESH_LATENCY=2
+
 source /path/to/zsh-ref-fresh/zsh-ref-fresh.zsh
 ```
 
-For a plugin manager, put the variables before the manager loads Ref Fresh:
+For a plugin manager, put any optional variables before the manager loads Ref
+Fresh:
 
 ```zsh
-REF_FRESH_ENABLE=1
-REF_FRESH_LATENCY=0.5
+# Optional: change the default 0.5 second fswatch latency.
+REF_FRESH_LATENCY=2
 
 # Your plugin manager loads evanthegrayt/zsh-ref-fresh here.
 ```
 
-Most configuration is read dynamically. If you set `REF_FRESH_ENABLE=0` after
-Ref Fresh has already loaded, the active watcher stops on the next prompt check.
-If you set it back to `1`, watching resumes on the next prompt check.
+Most configuration is read dynamically. `REF_FRESH_AUTO_START` is the exception:
+it only controls whether Ref Fresh starts automatically when sourced, and its
+default is `1` (enabled).
 
 `REF_FRESH_LATENCY` is read when a watcher starts. If you change latency while a
 watcher is already running, call `ref_fresh_restart` or wait until you enter a
@@ -97,24 +107,32 @@ Configuration uses environment variables:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `REF_FRESH_ENABLE` | `1` | Enable prompt redraws. Truthy values are `1`, `true`, `yes`, and `on`. |
+| `REF_FRESH_AUTO_START` | `1` | Start Ref Fresh automatically when sourced. Set to `0` to skip automatic start-up.|
 | `REF_FRESH_LATENCY` | `0.5` | Seconds passed to `fswatch --latency`. |
 | `REF_FRESH_BACKEND` | `fswatch` | Watch backend. Only `fswatch` is supported today. |
 | `REF_FRESH_DEBUG` | `0` | Print debug messages to stderr when truthy. |
 
-Disable Ref Fresh with:
+
+If you disable automatic start-up, You can turn it on later in the current shell with:
 
 ```zsh
-REF_FRESH_ENABLE=0
+ref_fresh_start
 ```
 
-You can also stop and restart it from an interactive shell:
+## Commands
+
+You can stop, start, and restart the current shell's hooks and watcher
+directly:
 
 ```zsh
 ref_fresh_stop
 ref_fresh_start
 ref_fresh_restart
 ```
+
+The manual commands do not change `REF_FRESH_AUTO_START`. If
+`REF_FRESH_AUTO_START=0`, `ref_fresh_start` and `ref_fresh_restart` still start
+Ref Fresh in the current shell.
 
 `ref_fresh_check_pwd` is the public hook function. It checks the current
 directory, starts a watcher when you enter a Git worktree, reuses the active
@@ -137,7 +155,7 @@ The flow is:
 That means your prompt should calculate Git information during prompt expansion,
 or call a function from `PROMPT`/`RPROMPT` while `prompt_subst` is enabled.
 
-For example:
+### Example
 
 ```zsh
 setopt prompt_subst
@@ -165,7 +183,7 @@ terminal changes the repository. The plugin does not decide what `my_git_prompt`
 returns.
 
 For a full prompt example, see [my personal
-theme](https://github.com/evanthegrayt/grayt-zsh-theme/blob/master/grayt.zsh-theme).
+theme](https://github.com/evanthegrayt/grayt-zsh-theme/blob/master/grayt.zsh-themehttps://github.com/evanthegrayt/grayt-zsh-theme/blob/master/grayt.zsh-theme).
 
 If your prompt only calculates Git state in a `precmd` hook and stores it in a
 variable, a prompt reset may redraw the old cached value. In that case, move the
@@ -185,3 +203,17 @@ deciding what to show.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development notes, project boundaries,
 and test commands.
+
+## Inspiration
+
+Ref Fresh was inspired by [Cobalt
+Spark's](https://github.com/azhuchkov/cobalt-spark) Live Git updates. See
+[LICENSE](LICENSE) for more details.
+
+## Support this project
+I love knowing when people find my work useful. Any kind of support is very much
+appreciated!
+
+- ⭐️ Like the project? Star [the repository](https://github.com/evanthegrayt/zsh-ref-fresh)!
+- ❤️ Love the project? Follow me [on GitHub](https://github.com/evanthegrayt)!
+- 💸 *Really* love it? Consider [buying me a tea](https://paypal.me/evanrgray)!

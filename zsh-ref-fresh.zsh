@@ -12,7 +12,8 @@
 # dirty-state formatting. Prompts remain responsible for recalculating their own
 # state when zsh redraws.
 #
-# @env REF_FRESH_ENABLE Enables redraws when set to `1`, `true`, `yes`, or `on`.
+# @env REF_FRESH_AUTO_START Enables automatic startup when set to `1`, `true`, `yes`, or `on`.
+# @env REF_FRESH_ENABLE Deprecated fallback for `REF_FRESH_AUTO_START`.
 # @env REF_FRESH_LATENCY Seconds passed to `fswatch --latency`; defaults to `0.5`.
 # @env REF_FRESH_BACKEND Watch backend; only `fswatch` is supported.
 # @env REF_FRESH_DEBUG Prints debug messages when truthy.
@@ -69,13 +70,14 @@ function __ref_fresh_git() {
 
 ##
 # @internal
-# @description Check whether Ref Fresh is enabled.
+# @description Check whether Ref Fresh should start automatically.
 #
-# @env REF_FRESH_ENABLE Enables redraws when truthy; defaults to enabled.
-# @exitcode 0 Ref Fresh is enabled.
-# @exitcode 1 Ref Fresh is disabled.
-function __ref_fresh_enabled() {
-  __ref_fresh_truthy "${REF_FRESH_ENABLE:-1}"
+# @env REF_FRESH_AUTO_START Enables automatic startup when truthy; defaults to enabled.
+# @env REF_FRESH_ENABLE Deprecated fallback when `REF_FRESH_AUTO_START` is unset.
+# @exitcode 0 Ref Fresh should start automatically.
+# @exitcode 1 Ref Fresh should not start automatically.
+function __ref_fresh_autostart_enabled() {
+  __ref_fresh_truthy "${REF_FRESH_AUTO_START:-${REF_FRESH_ENABLE:-1}}"
 }
 
 ##
@@ -275,12 +277,10 @@ function __ref_fresh_start_watcher() {
 ##
 # @description Start, keep, or stop the watcher for the current directory.
 #
-# This is the public `precmd` hook function. It checks whether Ref Fresh is
-# enabled, verifies the fswatch backend is available, detects the current Git
-# worktree, and starts a new watcher only when the shell enters a different
-# repository.
+# This is the public `precmd` hook function. It verifies the fswatch backend is
+# available, detects the current Git worktree, and starts a new watcher only
+# when the shell enters a different repository.
 #
-# @env REF_FRESH_ENABLE Enables or disables the feature.
 # @env REF_FRESH_BACKEND Watch backend; only `fswatch` is supported.
 # @set __ref_fresh_events_fd integer May be set or reset via watcher lifecycle.
 # @set __ref_fresh_pid integer May be set or reset via watcher lifecycle.
@@ -288,11 +288,6 @@ function __ref_fresh_start_watcher() {
 # @exitcode 0 Always succeeds; watcher startup failures fall back silently.
 function ref_fresh_check_pwd() {
   emulate -L zsh
-
-  if ! __ref_fresh_enabled; then
-    __ref_fresh_shutdown
-    return 0
-  fi
 
   if [[ "${REF_FRESH_BACKEND:-fswatch}" != fswatch ]]; then
     __ref_fresh_debug "unsupported backend: ${REF_FRESH_BACKEND:-}"
@@ -389,4 +384,4 @@ function ref_fresh_restart() {
   ref_fresh_start
 }
 
-ref_fresh_start
+__ref_fresh_autostart_enabled && ref_fresh_start
