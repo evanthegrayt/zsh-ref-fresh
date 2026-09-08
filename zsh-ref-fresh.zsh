@@ -1,5 +1,5 @@
 ##
-# @file ref-fresh.zsh
+# @file zsh-ref-fresh.zsh
 # @brief Idle prompt redraws for Git repositories.
 # @description Idle prompt redraws for Git repositories.
 #
@@ -230,7 +230,7 @@ function __ref_fresh_start_watcher() {
   done
 
   tmpdir="${TMPDIR:-/tmp}"
-  fifo_dir=$(command mktemp -d "${tmpdir%/}/ref-fresh.XXXXXX") || return 1
+  fifo_dir=$(command mktemp -d "${tmpdir%/}/zsh-ref-fresh.XXXXXX") || return 1
   events_fifo="$fifo_dir/events"
 
   command mkfifo "$events_fifo" || {

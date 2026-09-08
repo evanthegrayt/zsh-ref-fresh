@@ -15,8 +15,8 @@ emulate -L zsh
 setopt err_return no_unset pipe_fail
 
 typeset -r plugin_dir="${0:A:h:h}"
-typeset -r plugin_file="$plugin_dir/ref-fresh.zsh"
-typeset -r temp_dir="$(command mktemp -d "${TMPDIR:-/tmp}/ref-fresh-smoke.XXXXXX")"
+typeset -r plugin_file="$plugin_dir/zsh-ref-fresh.zsh"
+typeset -r temp_dir="$(command mktemp -d "${TMPDIR:-/tmp}/zsh-ref-fresh-smoke.XXXXXX")"
 typeset -r fake_bin="$temp_dir/bin"
 typeset -r fake_log="$temp_dir/fswatch.log"
 

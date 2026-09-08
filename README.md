@@ -29,7 +29,7 @@ If `fswatch` is not installed, Ref Fresh quietly does nothing.
 ### Manual
 
 ```zsh
-source /path/to/ref-fresh/ref-fresh.zsh
+source /path/to/zsh-ref-fresh/zsh-ref-fresh.zsh
 ```
 
 ### Oh My Zsh
@@ -38,13 +38,13 @@ Clone this repository into your custom plugins directory:
 
 ```zsh
 git clone https://github.com/evanthegrayt/zsh-ref-fresh \
-  ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/ref-fresh
+  ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-ref-fresh
 ```
 
 Then enable it:
 
 ```zsh
-plugins=(... ref-fresh)
+plugins=(... zsh-ref-fresh)
 ```
 
 ### zinit
@@ -66,14 +66,14 @@ zplug "evanthegrayt/zsh-ref-fresh"
 
 Set configuration variables in your zsh startup file before Ref Fresh loads when
 you can. If you install Ref Fresh with a plugin manager, the plugin manager
-usually sources the plugin for you; do not also source `ref-fresh.zsh` manually.
+usually sources the plugin for you; do not also source `zsh-ref-fresh.zsh` manually.
 
 For a manual install, set variables and then source the plugin:
 
 ```zsh
 REF_FRESH_ENABLE=1
 REF_FRESH_LATENCY=0.5
-source /path/to/ref-fresh/ref-fresh.zsh
+source /path/to/zsh-ref-fresh/zsh-ref-fresh.zsh
 ```
 
 For a plugin manager, put the variables before the manager loads Ref Fresh:

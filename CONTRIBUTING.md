@@ -14,7 +14,7 @@ gives existing prompts a chance to re-run their own Git logic when something
 changes outside the active shell, such as another terminal editing files or
 switching branches.
 
-The main implementation lives in `ref-fresh.zsh`. The `ref-fresh.plugin.zsh`
+The main implementation lives in `zsh-ref-fresh.zsh`. The `zsh-ref-fresh.plugin.zsh`
 file is only a plugin-manager entrypoint that sources the main file.
 
 ## Project Boundaries
@@ -109,7 +109,7 @@ test uses a fake `fswatch`, so it can run even when the real tool is not
 installed.
 
 For manual testing with real filesystem events, install `fswatch` through your
-platform package manager, then source `ref-fresh.zsh` from an interactive zsh
+platform package manager, then source `zsh-ref-fresh.zsh` from an interactive zsh
 session.
 
 ## Coding Guidelines
@@ -154,8 +154,8 @@ the public surface.
 Run syntax checks first:
 
 ```zsh
-zsh -n ref-fresh.zsh
-zsh -n ref-fresh.plugin.zsh
+zsh -n zsh-ref-fresh.zsh
+zsh -n zsh-ref-fresh.plugin.zsh
 zsh -n test/smoke.zsh
 ```
 
