@@ -2,7 +2,7 @@
 
 [![Shell: zsh](https://img.shields.io/static/v1?label=shell&message=zsh&color=4EAA25&style=flat&logo=shell&logoColor=white)](https://www.zsh.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build Status](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Factions-badge.atrox.dev%2Fevanthegrayt%2Fzsh-ref-fresh%2Fbadge%3Fref%3Dmaster&style=flat)](https://actions-badge.atrox.dev/evanthegrayt/zsh-ref-fresh/goto?ref=master)
+[![CI](https://github.com/evanthegrayt/zsh-ref-fresh/actions/workflows/ci.yml/badge.svg)](https://github.com/evanthegrayt/zsh-ref-fresh/actions/workflows/ci.yml)
 
 Ref Fresh keeps zsh prompts fresh while your shell is idle in a Git repository.
 When another terminal or program edits files, changes branches, rebases, or
