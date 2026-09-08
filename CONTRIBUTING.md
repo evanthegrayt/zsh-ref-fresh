@@ -60,32 +60,34 @@ unless there is a clear user-facing reason to expose them.
 Configuration currently uses environment variables:
 
 ```zsh
-REF_FRESH_ENABLE=1
+REF_FRESH_AUTO_START=1 # Controls source-time automatic startup.
 REF_FRESH_LATENCY=0.5
 REF_FRESH_BACKEND=fswatch
 REF_FRESH_DEBUG=0
 ```
 
-Most configuration is read dynamically when `ref_fresh_check_pwd` runs.
-`REF_FRESH_LATENCY` is read when a watcher starts, so changing it for an active
-watcher requires `ref_fresh_restart` or moving to a different repository.
+Most configuration is read dynamically when `ref_fresh_check_pwd` runs, but
+`REF_FRESH_AUTO_START` is only read when the plugin is sourced.
+`REF_FRESH_ENABLE` is supported as a deprecated fallback when
+`REF_FRESH_AUTO_START` is unset. `REF_FRESH_LATENCY` is read when a watcher
+starts, so changing it for an active watcher requires `ref_fresh_restart` or
+moving to a different repository.
 
 ## Watcher Lifecycle
 
 1. `ref_fresh_start` registers `ref_fresh_check_pwd` as a `precmd` hook and
    registers cleanup for `zshexit`.
 2. `ref_fresh_check_pwd` runs before each prompt render.
-3. If `REF_FRESH_ENABLE` is disabled, the active watcher is stopped.
-4. If the backend is unsupported or `fswatch` is missing, the active watcher is
+3. If the backend is unsupported or `fswatch` is missing, the active watcher is
    stopped.
-5. If the shell is not in a Git worktree, the active watcher is stopped.
-6. If the shell is still in the already-watched worktree, nothing changes.
-7. If the shell enters a different worktree, the old watcher is stopped and a
+4. If the shell is not in a Git worktree, the active watcher is stopped.
+5. If the shell is still in the already-watched worktree, nothing changes.
+6. If the shell enters a different worktree, the old watcher is stopped and a
    new one starts.
-8. `fswatch` writes batched events into a FIFO.
-9. zsh watches the FIFO with `zle -F`.
-10. `__ref_fresh_on_event` drains pending events and calls `zle .reset-prompt`.
-11. `zshexit` cleanup stops the watcher and closes the FIFO descriptor.
+7. `fswatch` writes batched events into a FIFO.
+8. zsh watches the FIFO with `zle -F`.
+9. `__ref_fresh_on_event` drains pending events and calls `zle .reset-prompt`.
+10. `zshexit` cleanup stops the watcher and closes the FIFO descriptor.
 
 The watcher observes the Git worktree root. It also observes `--git-dir` and
 `--git-common-dir` when those directories live outside the worktree. This covers
@@ -167,7 +169,7 @@ zsh test/smoke.zsh
 
 The smoke test covers:
 
-- disabled mode
+- disabled autostart
 - missing `fswatch`
 - fake `fswatch` startup and cleanup
 - active repository root tracking

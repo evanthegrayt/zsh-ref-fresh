@@ -3,9 +3,10 @@
 # @file smoke.zsh
 # @brief Smoke tests for Ref Fresh.
 # @description
-#     Runs a small interactive zsh test harness that validates disabled mode,
-#     missing fswatch behavior, fake fswatch watcher startup, same-repository
-#     reuse, leaving a repository, switching repositories, and explicit cleanup.
+#     Runs a small interactive zsh test harness that validates disabled
+#     autostart, legacy disabled autostart, default autostart, missing fswatch
+#     behavior, fake fswatch watcher startup, same-repository reuse, leaving a
+#     repository, switching repositories, and explicit cleanup.
 
 if [[ ! -o interactive ]]; then
   exec zsh -fi "$0" "$@"
@@ -161,12 +162,13 @@ install_fake_fswatch
 export REF_FRESH_TEST_LOG="$fake_log"
 export PATH="$fake_bin:$original_path"
 
-export REF_FRESH_ENABLE=0
+export REF_FRESH_AUTO_START=0
+unset REF_FRESH_ENABLE
 source "$plugin_file"
+assert_no_watcher "disabled autostart"
+pass "disabled config skips automatic startup"
+
 builtin cd "$repo_a"
-ref_fresh_check_pwd
-assert_no_watcher "disabled"
-pass "disabled config starts no watcher"
 
 ##
 # @description Override command lookup to simulate missing fswatch.
@@ -184,8 +186,7 @@ function whence() {
   builtin whence "$@"
 }
 
-export REF_FRESH_ENABLE=1
-ref_fresh_restart
+ref_fresh_start
 assert_no_watcher "missing fswatch"
 pass "missing fswatch is a graceful no-op"
 
@@ -195,7 +196,7 @@ ref_fresh_restart
 assert_watcher_alive "repo a"
 assert_eq "${repo_a:A}" "$__ref_fresh_root" "repo root stored"
 typeset -i first_pid="$__ref_fresh_pid"
-pass "fake fswatch watcher starts"
+pass "manual start works with disabled autostart"
 
 command mkdir -p -- "$repo_a/subdir"
 builtin cd "$repo_a/subdir"
@@ -225,3 +226,17 @@ pass "switching repos replaces the watcher"
 ref_fresh_stop
 assert_no_watcher "explicit stop"
 pass "explicit stop cleans up"
+
+unset REF_FRESH_AUTO_START
+export REF_FRESH_ENABLE=0
+builtin cd "$repo_a"
+source "$plugin_file"
+assert_no_watcher "legacy disabled autostart"
+pass "legacy disabled config skips automatic startup"
+
+unset REF_FRESH_AUTO_START
+unset REF_FRESH_ENABLE
+builtin cd "$repo_a"
+source "$plugin_file"
+assert_watcher_alive "default autostart"
+pass "default config starts automatically"
