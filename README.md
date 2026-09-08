@@ -13,7 +13,7 @@ It does not render a prompt, choose a branch format, calculate dirty state, or
 cache Git status. It only watches the current repository and calls `zle
 .reset-prompt` after repository filesystem changes. If you're interested in a
 full prompt, you can check out [my personal
-theme](https://github.com/evanthegrayt/grayt-zsh-theme). Just be aware you'll
+prompt](https://github.com/evanthegrayt/grayt-zsh-theme). Just be aware you'll
 still need this plugin for live updates to work.
 
 ## Requirements
@@ -187,7 +187,7 @@ terminal changes the repository. The plugin does not decide what `my_git_prompt`
 returns.
 
 For a full prompt example, see [my personal
-theme](https://github.com/evanthegrayt/grayt-zsh-theme/blob/master/grayt.zsh-themehttps://github.com/evanthegrayt/grayt-zsh-theme/blob/master/grayt.zsh-theme).
+theme](https://github.com/evanthegrayt/grayt-zsh-theme/blob/master/grayt.zsh-theme).
 
 If your prompt only calculates Git state in a `precmd` hook and stores it in a
 variable, a prompt reset may redraw the old cached value. In that case, move the
