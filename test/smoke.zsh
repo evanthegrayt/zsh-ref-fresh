@@ -6,7 +6,7 @@
 #     Runs a small interactive zsh test harness that validates disabled
 #     autostart, legacy disabled autostart, default autostart, missing fswatch
 #     behavior, fake fswatch watcher startup, same-repository reuse, leaving a
-#     repository, switching repositories, and explicit cleanup.
+#     repository, switching repositories, explicit cleanup, and shell EOF.
 
 if [[ ! -o interactive ]]; then
   exec zsh -fi "$0" "$@"
@@ -26,6 +26,11 @@ typeset -r fake_log="$temp_dir/fswatch.log"
 # @exitcode 0 Always succeeds.
 function cleanup() {
   (( ${+functions[ref_fresh_stop]} )) && ref_fresh_stop
+  local ready_file watcher_pid
+  for ready_file in "$temp_dir"/*.ready(N); do
+    IFS= read -r watcher_pid < "$ready_file"
+    kill -KILL "$watcher_pid" 2> /dev/null || true
+  done
   command rm -rf -- "$temp_dir"
 }
 
@@ -42,14 +47,14 @@ function pass() {
 }
 
 ##
-# @description Print a failing test line and return a failure status.
+# @description Print a failing test line and exit with a failure status.
 #
 # @arg $1 string Failure description.
 # @stderr TAP-style failing test line.
-# @exitcode 1 Always fails.
+# @exitcode 1 Always exits with failure.
 function fail() {
   print -ru2 -- "not ok - $1"
-  return 1
+  exit 1
 }
 
 ##
@@ -115,6 +120,39 @@ function assert_watcher_alive() {
 }
 
 ##
+# @description Assert that a watcher has exited, allowing signal delivery time.
+# @arg $1 integer Watcher PID.
+# @arg $2 string Assertion label.
+# @exitcode 0 Watcher exited.
+# @exitcode 1 Watcher remained alive.
+function assert_watcher_stopped() {
+  local watcher_pid="$1" label="$2"
+  local -i attempt
+
+  for attempt in {1..100}; do
+    kill -0 "$watcher_pid" 2> /dev/null || return 0
+    command sleep 0.01
+  done
+  fail "$label: watcher still alive"
+}
+
+##
+# @description Wait for the fake watcher to install its signal handler.
+# @arg $1 string Readiness file.
+# @exitcode 0 Watcher is ready.
+# @exitcode 1 Watcher did not become ready.
+function wait_for_watcher() {
+  local ready_file="$1"
+  local -i attempt
+
+  for attempt in {1..100}; do
+    [[ -s "$ready_file" ]] && return 0
+    command sleep 0.01
+  done
+  fail "watcher did not become ready"
+}
+
+##
 # @description Create an empty Git repository for smoke testing.
 #
 # @arg $1 string Repository directory path.
@@ -131,8 +169,8 @@ function make_repo() {
 ##
 # @description Install a fake fswatch executable earlier in PATH.
 #
-# The fake process records its invocation, traps termination, and sleeps until
-# Ref Fresh stops the watcher.
+# The fake process records its invocation and waits without spawning children.
+# It can ignore TERM to exercise forced termination.
 #
 # @set fake_bin string Directory containing the fake executable.
 # @set fake_log string File where fake fswatch invocations are recorded.
@@ -142,9 +180,15 @@ function install_fake_fswatch() {
   command mkdir -p -- "$fake_bin"
   {
     print -r -- '#!/usr/bin/env zsh'
+    print -r -- 'zmodload zsh/zselect'
+    print -r -- 'if [[ "${REF_FRESH_TEST_IGNORE_TERM:-0}" == 1 ]]; then'
+    print -r -- '  trap "" TERM'
+    print -r -- 'else'
+    print -r -- '  trap "exit 0" TERM INT'
+    print -r -- 'fi'
     print -r -- 'print -r -- "$PWD|$*" >> "$REF_FRESH_TEST_LOG"'
-    print -r -- 'trap "exit 0" TERM INT'
-    print -r -- 'while true; do sleep 60; done'
+    print -r -- '[[ -n "${REF_FRESH_TEST_READY:-}" ]] && print -r -- "$$" > "$REF_FRESH_TEST_READY"'
+    print -r -- 'while true; do zselect -t 6000; done'
   } > "$fake_bin/fswatch"
   command chmod +x "$fake_bin/fswatch"
 }
@@ -208,6 +252,7 @@ pass "same repo reuses the active watcher"
 builtin cd "$outside"
 ref_fresh_check_pwd
 assert_no_watcher "outside repo"
+assert_watcher_stopped "$first_pid" "leaving repo"
 pass "leaving repo stops watcher"
 
 builtin cd "$repo_a"
@@ -223,9 +268,45 @@ assert_eq "${repo_b:A}" "$__ref_fresh_root" "repo b root stored"
 kill -0 "$old_pid" 2> /dev/null && fail "old watcher still alive"
 pass "switching repos replaces the watcher"
 
+typeset -i stopped_pid="$__ref_fresh_pid"
 ref_fresh_stop
 assert_no_watcher "explicit stop"
+assert_watcher_stopped "$stopped_pid" "explicit stop"
 pass "explicit stop cleans up"
+
+builtin cd "$repo_a"
+export REF_FRESH_TEST_IGNORE_TERM=1
+export REF_FRESH_TEST_READY="$temp_dir/stubborn.ready"
+ref_fresh_start
+wait_for_watcher "$REF_FRESH_TEST_READY"
+typeset -i stubborn_pid="$__ref_fresh_pid"
+ref_fresh_stop
+assert_no_watcher "stubborn stop"
+assert_watcher_stopped "$stubborn_pid" "stubborn stop"
+command rm -- "$REF_FRESH_TEST_READY"
+pass "explicit stop terminates a watcher that ignores TERM"
+
+export REF_FRESH_TEST_READY="$temp_dir/eof.ready"
+export REF_FRESH_TEST_PLUGIN="$plugin_file"
+export REF_FRESH_TEST_REPO="$repo_a"
+export REF_FRESH_TEST_PID_FILE="$temp_dir/eof.pid"
+REF_FRESH_AUTO_START=1 command zsh -fi > "$temp_dir/eof.stdout" 2> "$temp_dir/eof.stderr" <<'ZSH'
+unsetopt ignoreeof
+cd -- "$REF_FRESH_TEST_REPO"
+source "$REF_FRESH_TEST_PLUGIN"
+for attempt in {1..100}; do
+  [[ -s "$REF_FRESH_TEST_READY" ]] && break
+  command sleep 0.01
+done
+[[ -s "$REF_FRESH_TEST_READY" ]] || exit 1
+print -r -- "$__ref_fresh_pid" > "$REF_FRESH_TEST_PID_FILE"
+ZSH
+typeset -i eof_pid="$(< "$REF_FRESH_TEST_PID_FILE")"
+(( eof_pid > 0 )) || fail "EOF watcher pid not set"
+assert_watcher_stopped "$eof_pid" "shell EOF"
+command rm -- "$REF_FRESH_TEST_READY"
+unset REF_FRESH_TEST_IGNORE_TERM REF_FRESH_TEST_READY
+pass "shell EOF terminates a watcher that ignores TERM"
 
 unset REF_FRESH_AUTO_START
 export REF_FRESH_ENABLE=0

@@ -130,6 +130,35 @@ function __ref_fresh_quote_ere() {
 
 ##
 # @internal
+# @description Terminate the active watcher, escalating after a short grace period.
+#
+# @set __ref_fresh_pid integer Reset to `-1`.
+# @exitcode 0 Always succeeds.
+function __ref_fresh_stop_watcher() {
+  emulate -L zsh
+
+  local -i watcher_pid=$__ref_fresh_pid attempt
+  __ref_fresh_pid=-1
+
+  if (( watcher_pid > 0 )); then
+    if kill -TERM "$watcher_pid" 2> /dev/null; then
+      # Disowned jobs cannot be waited on reliably, so poll before escalating.
+      for attempt in {1..10}; do
+        kill -0 "$watcher_pid" 2> /dev/null || break
+        command sleep 0.05
+      done
+      if kill -0 "$watcher_pid" 2> /dev/null; then
+        kill -KILL "$watcher_pid" 2> /dev/null
+      fi
+    fi
+    wait "$watcher_pid" 2> /dev/null
+  fi
+
+  return 0
+}
+
+##
+# @internal
 # @description Stop the active watcher and clear tracked state.
 #
 # @set __ref_fresh_events_fd integer Reset to `-1`.
@@ -145,11 +174,7 @@ function __ref_fresh_shutdown() {
     __ref_fresh_events_fd=-1
   fi
 
-  if (( __ref_fresh_pid > 0 )); then
-    kill "$__ref_fresh_pid" 2> /dev/null
-    wait "$__ref_fresh_pid" 2> /dev/null
-    __ref_fresh_pid=-1
-  fi
+  __ref_fresh_stop_watcher
 
   __ref_fresh_root=
 }
@@ -254,9 +279,7 @@ function __ref_fresh_start_watcher() {
   __ref_fresh_pid=$!
 
   exec {events_fd}< "$events_fifo" || {
-    kill "$__ref_fresh_pid" 2> /dev/null
-    wait "$__ref_fresh_pid" 2> /dev/null
-    __ref_fresh_pid=-1
+    __ref_fresh_stop_watcher
     __ref_fresh_cleanup_fifo "$events_fifo" "$fifo_dir"
     return 1
   }
