@@ -89,6 +89,10 @@ moving to a different repository.
 9. `__ref_fresh_on_event` drains pending events and calls `zle .reset-prompt`.
 10. `zshexit` cleanup stops the watcher and closes the FIFO descriptor.
 
+Watcher shutdown sends `TERM`, polls for up to half a second, and sends `KILL`
+if the disowned watcher is still running. Startup failure uses the same cleanup.
+Normal shell EOF runs `zshexit`; a shell killed with `KILL` cannot run hooks.
+
 The watcher observes the Git worktree root. It also observes `--git-dir` and
 `--git-common-dir` when those directories live outside the worktree. This covers
 normal repositories, linked worktrees, and repositories whose `.git` metadata
@@ -176,6 +180,8 @@ The smoke test covers:
 - same-repository watcher reuse
 - stopping after leaving a repository
 - replacing the watcher after switching repositories
+- terminating a watcher that ignores `TERM`
+- watcher cleanup when an interactive shell reaches EOF
 
 When behavior changes touch watcher startup, shutdown, path selection, or hook
 registration, update `test/smoke.zsh` in the same change.
