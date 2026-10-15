@@ -6,7 +6,7 @@
 #     Runs a small interactive zsh test harness that validates disabled
 #     autostart, legacy disabled autostart, default autostart, missing fswatch
 #     behavior, fake fswatch watcher startup, same-repository reuse, leaving a
-#     repository, switching repositories, and explicit cleanup.
+#     repository, switching repositories, explicit cleanup, EOF, and signals.
 
 if [[ ! -o interactive ]]; then
   exec zsh -fi "$0" "$@"
@@ -14,18 +14,28 @@ fi
 
 emulate -L zsh
 setopt err_return no_unset pipe_fail
+zmodload zsh/zpty
+zmodload zsh/zselect
 
 typeset -r plugin_dir="${0:A:h:h}"
 typeset -r plugin_file="$plugin_dir/zsh-ref-fresh.zsh"
 typeset -r temp_dir="$(command mktemp -d "${TMPDIR:-/tmp}/zsh-ref-fresh-smoke.XXXXXX")"
 typeset -r fake_bin="$temp_dir/bin"
 typeset -r fake_log="$temp_dir/fswatch.log"
+typeset -gi session_shell_pid=-1 session_watcher_pid=-1
 
 ##
 # @description Stop the active watcher and remove temporary test files.
 # @exitcode 0 Always succeeds.
 function cleanup() {
   (( ${+functions[ref_fresh_stop]} )) && ref_fresh_stop
+  zpty -d ref-fresh-test 2> /dev/null || true
+  if (( session_shell_pid > 0 )); then
+    kill -KILL "$session_shell_pid" 2> /dev/null || true
+  fi
+  if (( session_watcher_pid > 0 )); then
+    kill -KILL "$session_watcher_pid" 2> /dev/null || true
+  fi
   command rm -rf -- "$temp_dir"
 }
 
@@ -42,14 +52,14 @@ function pass() {
 }
 
 ##
-# @description Print a failing test line and return a failure status.
+# @description Print a failing test line and exit with a failure status.
 #
 # @arg $1 string Failure description.
 # @stderr TAP-style failing test line.
-# @exitcode 1 Always fails.
+# @exitcode 1 Always exits with failure.
 function fail() {
   print -ru2 -- "not ok - $1"
-  return 1
+  exit 1
 }
 
 ##
@@ -67,6 +77,19 @@ function assert_eq() {
   local label="$3"
 
   [[ "$want" == "$got" ]] || fail "$label: expected '$want', got '$got'"
+}
+
+##
+# @description Assert that a file's first line matches an expected value.
+# @arg $1 string Expected value.
+# @arg $2 string File to read.
+# @arg $3 string Assertion label.
+# @exitcode 0 The file matches.
+# @exitcode 1 The file could not be read or did not match.
+function assert_file_eq() {
+  local got
+  IFS= read -r got < "$2" || fail "$3: could not read $2"
+  assert_eq "$1" "$got" "$3"
 }
 
 ##
@@ -115,6 +138,88 @@ function assert_watcher_alive() {
 }
 
 ##
+# @description Wait for the test shell to reach an idle prompt.
+# @exitcode 0 The prompt was received.
+# @exitcode 1 The shell exited or did not reach its prompt.
+function wait_for_session_prompt() {
+  local output= chunk
+  local -i attempt
+
+  for attempt in {1..500}; do
+    if zpty -r -t ref-fresh-test chunk; then
+      output+="$chunk"
+      [[ "$output" == *'REF_FRESH_TEST_PROMPT> '* && -s "$REF_FRESH_TEST_STATE" ]] && return 0
+    fi
+    zselect -t 1 || true
+  done
+  fail "test shell did not reach its prompt: $output"
+}
+
+##
+# @description Start an interactive shell with a ready watcher under a PTY.
+# @arg $1 integer Install a user HUP trap when set to 1; defaults to 0.
+# @set session_shell_pid integer Shell PID.
+# @set session_watcher_pid integer Watcher PID.
+# @exitcode 0 The shell and watcher are ready.
+# @exitcode 1 Startup failed.
+function start_test_session() {
+  export REF_FRESH_TEST_HUP_TRAP="${1:-0}"
+  command rm -f -- "$REF_FRESH_TEST_STATE" "$REF_FRESH_TEST_READY" \
+    "$REF_FRESH_TEST_EXIT" "$REF_FRESH_TEST_TRAP_LOG"
+  zpty -b ref-fresh-test exec zsh -fi || fail "could not start test shell"
+  zpty -w ref-fresh-test 'unsetopt ignoreeof; bindkey -e; cd -- "$REF_FRESH_TEST_REPO"'
+  zpty -w ref-fresh-test 'if (( REF_FRESH_TEST_HUP_TRAP )); then trap '\''print -r -- user-hup > "$REF_FRESH_TEST_TRAP_LOG"'\'' HUP; fi'
+  zpty -w ref-fresh-test 'REF_FRESH_AUTO_START=1; source "$REF_FRESH_TEST_PLUGIN"'
+  zpty -w ref-fresh-test 'test_exit() { print -r -- "$__ref_fresh_pid:$__ref_fresh_events_fd:$__ref_fresh_root" > "$REF_FRESH_TEST_EXIT"; }; add-zsh-hook zshexit test_exit'
+  # Split the marker so echoed input cannot be mistaken for the actual prompt.
+  zpty -w ref-fresh-test 'print -r -- "$$ $__ref_fresh_pid" > "$REF_FRESH_TEST_STATE"; PROMPT="REF_FRESH_TEST_""PROMPT> "; RPROMPT='
+  wait_for_session_prompt
+  IFS=' ' read -r session_shell_pid session_watcher_pid < "$REF_FRESH_TEST_STATE" || fail "could not read session PIDs"
+  (( session_shell_pid > 0 && session_watcher_pid > 0 )) || fail "session PIDs not set"
+
+  local -i attempt
+  for attempt in {1..500}; do
+    if [[ -s "$REF_FRESH_TEST_READY" ]]; then
+      assert_file_eq "$session_watcher_pid" "$REF_FRESH_TEST_READY" "ready watcher PID"
+      kill -0 "$session_watcher_pid" 2> /dev/null || fail "session watcher not alive"
+      return 0
+    fi
+    zselect -t 1 || true
+  done
+  fail "session watcher did not become ready"
+}
+
+##
+# @description Assert that the shell exited and its hook stopped the watcher.
+# @exitcode 0 Shell, watcher, and tracked state were cleaned up.
+# @exitcode 1 Cleanup was incomplete.
+function assert_session_cleaned_up() {
+  local -i attempt
+  local output= chunk running=no exit_state=missing
+
+  for attempt in {1..500}; do
+    # Drain output as a terminal emulator would; PTY exit detection needs this.
+    while zpty -r -t ref-fresh-test chunk; do
+      output+="$chunk"
+    done
+    if ! kill -0 "$session_shell_pid" 2> /dev/null && ! kill -0 "$session_watcher_pid" 2> /dev/null; then
+      assert_file_eq '-1:-1:' "$REF_FRESH_TEST_EXIT" "exit hook cleared watcher state"
+      zpty -d ref-fresh-test
+      session_shell_pid=-1
+      session_watcher_pid=-1
+      return 0
+    fi
+    zselect -t 1 || true
+  done
+  while zpty -r -t ref-fresh-test chunk; do
+    output+="$chunk"
+  done
+  kill -0 "$session_shell_pid" 2> /dev/null && running=yes
+  [[ -r "$REF_FRESH_TEST_EXIT" ]] && IFS= read -r exit_state < "$REF_FRESH_TEST_EXIT"
+  fail "shell or watcher remained alive after exit (shell=$running exit_hook=$exit_state watcher=$session_watcher_pid): $output"
+}
+
+##
 # @description Create an empty Git repository for smoke testing.
 #
 # @arg $1 string Repository directory path.
@@ -131,8 +236,8 @@ function make_repo() {
 ##
 # @description Install a fake fswatch executable earlier in PATH.
 #
-# The fake process records its invocation, traps termination, and sleeps until
-# Ref Fresh stops the watcher.
+# The fake process records its invocation and waits without spawning children.
+# Ignoring HUP ensures that the shell's cleanup hook must stop it explicitly.
 #
 # @set fake_bin string Directory containing the fake executable.
 # @set fake_log string File where fake fswatch invocations are recorded.
@@ -142,9 +247,12 @@ function install_fake_fswatch() {
   command mkdir -p -- "$fake_bin"
   {
     print -r -- '#!/usr/bin/env zsh'
-    print -r -- 'print -r -- "$PWD|$*" >> "$REF_FRESH_TEST_LOG"'
+    print -r -- 'zmodload zsh/zselect'
+    print -r -- 'trap "" HUP'
     print -r -- 'trap "exit 0" TERM INT'
-    print -r -- 'while true; do sleep 60; done'
+    print -r -- 'print -r -- "$PWD|$*" >> "$REF_FRESH_TEST_LOG"'
+    print -r -- '[[ -n "${REF_FRESH_TEST_READY:-}" ]] && print -r -- "$$" > "$REF_FRESH_TEST_READY"'
+    print -r -- 'while true; do zselect -t 6000; done'
   } > "$fake_bin/fswatch"
   command chmod +x "$fake_bin/fswatch"
 }
@@ -240,3 +348,87 @@ builtin cd "$repo_a"
 source "$plugin_file"
 assert_watcher_alive "default autostart"
 pass "default config starts automatically"
+
+ref_fresh_stop
+export REF_FRESH_TEST_PLUGIN="$plugin_file"
+export REF_FRESH_TEST_REPO="$repo_a"
+export REF_FRESH_TEST_STATE="$temp_dir/session.pids"
+export REF_FRESH_TEST_READY="$temp_dir/session.ready"
+export REF_FRESH_TEST_EXIT="$temp_dir/session.exit"
+export REF_FRESH_TEST_TRAP_LOG="$temp_dir/session.trap"
+
+start_test_session
+zpty -w -n ref-fresh-test $'\x04'
+assert_session_cleaned_up
+pass "Ctrl-D at an idle prompt stops the watcher"
+
+start_test_session
+zpty -w ref-fresh-test exit
+assert_session_cleaned_up
+pass "explicit shell exit stops the watcher"
+
+start_test_session
+kill -HUP "$session_shell_pid"
+assert_session_cleaned_up
+pass "SIGHUP stops the watcher through the exit hook"
+
+start_test_session
+zpty -d ref-fresh-test
+for attempt in {1..500}; do
+  kill -0 "$session_watcher_pid" 2> /dev/null || break
+  zselect -t 1 || true
+done
+kill -0 "$session_watcher_pid" 2> /dev/null && fail "watcher survived PTY closure"
+assert_file_eq '-1:-1:' "$REF_FRESH_TEST_EXIT" "PTY closure cleanup"
+session_shell_pid=-1
+session_watcher_pid=-1
+pass "closing the pseudo-terminal stops the watcher"
+
+for signal in INT TERM QUIT; do
+  start_test_session
+  command rm -- "$REF_FRESH_TEST_STATE"
+  kill -"$signal" "$session_shell_pid"
+  zpty -w ref-fresh-test 'print -r -- "$$ $__ref_fresh_pid" > "$REF_FRESH_TEST_STATE"'
+  wait_for_session_prompt
+  zpty -t ref-fresh-test || fail "$signal terminated the interactive shell"
+  kill -0 "$session_watcher_pid" 2> /dev/null || fail "$signal stopped the active watcher"
+  assert_file_eq "$session_shell_pid $session_watcher_pid" "$REF_FRESH_TEST_STATE" "$signal retains watcher"
+  [[ ! -e "$REF_FRESH_TEST_EXIT" ]] || fail "$signal unexpectedly ran exit cleanup"
+  zpty -w ref-fresh-test exit
+  assert_session_cleaned_up
+  pass "SIG$signal preserves the session and watcher until shell exit"
+done
+
+start_test_session 1
+command rm -- "$REF_FRESH_TEST_STATE"
+kill -HUP "$session_shell_pid"
+zpty -w ref-fresh-test 'print -r -- "$$ $__ref_fresh_pid" > "$REF_FRESH_TEST_STATE"'
+wait_for_session_prompt
+assert_file_eq user-hup "$REF_FRESH_TEST_TRAP_LOG" "user HUP trap preserved"
+assert_file_eq "$session_shell_pid $session_watcher_pid" "$REF_FRESH_TEST_STATE" "user HUP trap retains watcher"
+kill -0 "$session_watcher_pid" 2> /dev/null || fail "user HUP trap stopped the watcher"
+[[ ! -e "$REF_FRESH_TEST_EXIT" ]] || fail "user HUP trap unexpectedly ran exit cleanup"
+zpty -w ref-fresh-test exit
+assert_session_cleaned_up
+pass "an existing user HUP trap retains control of signal handling"
+
+start_test_session
+kill -KILL "$session_shell_pid"
+for attempt in {1..500}; do
+  zpty -r -t ref-fresh-test chunk || true
+  kill -0 "$session_shell_pid" 2> /dev/null || break
+  zselect -t 1 || true
+done
+kill -0 "$session_shell_pid" 2> /dev/null && fail "SIGKILL did not terminate the test shell"
+[[ ! -e "$REF_FRESH_TEST_EXIT" ]] || fail "SIGKILL unexpectedly ran exit cleanup"
+kill -0 "$session_watcher_pid" 2> /dev/null || fail "SIGKILL test watcher not alive"
+kill -TERM "$session_watcher_pid"
+for attempt in {1..500}; do
+  kill -0 "$session_watcher_pid" 2> /dev/null || break
+  zselect -t 1 || true
+done
+kill -0 "$session_watcher_pid" 2> /dev/null && fail "SIGKILL test watcher teardown failed"
+zpty -d ref-fresh-test
+session_shell_pid=-1
+session_watcher_pid=-1
+pass "SIGKILL bypasses shell cleanup (test removes the surviving watcher)"

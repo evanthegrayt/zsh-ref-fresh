@@ -89,6 +89,14 @@ moving to a different repository.
 9. `__ref_fresh_on_event` drains pending events and calls `zle .reset-prompt`.
 10. `zshexit` cleanup stops the watcher and closes the FIFO descriptor.
 
+The exit hook also runs when zsh handles `SIGHUP`, as on terminal closure.
+At an idle interactive prompt, `SIGINT` interrupts input, while `SIGTERM` and
+`SIGQUIT` are normally ignored; the watcher should remain active. Keep cleanup
+on `zshexit` rather than installing signal traps that replace user handlers or
+change interactive shell behavior. User signal traps can change how zsh exits;
+cleanup depends on zsh reaching `zshexit`. `SIGKILL` cannot run cleanup, and
+`SIGSTOP` cannot be trapped.
+
 The watcher observes the Git worktree root. It also observes `--git-dir` and
 `--git-common-dir` when those directories live outside the worktree. This covers
 normal repositories, linked worktrees, and repositories whose `.git` metadata
@@ -176,6 +184,11 @@ The smoke test covers:
 - same-repository watcher reuse
 - stopping after leaving a repository
 - replacing the watcher after switching repositories
+- Ctrl-D and explicit exit at an interactive prompt
+- `SIGHUP` and pseudo-terminal closure cleanup
+- preserving the shell and watcher after `SIGINT`, `SIGTERM`, and `SIGQUIT`
+- preserving an existing user `SIGHUP` trap that keeps the shell running
+- the `SIGKILL` limitation (the test removes the surviving watcher)
 
 When behavior changes touch watcher startup, shutdown, path selection, or hook
 registration, update `test/smoke.zsh` in the same change.
