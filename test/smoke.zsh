@@ -143,8 +143,8 @@ function assert_watcher_alive() {
 }
 
 ##
-# @description Wait for the test shell to reach an idle prompt.
-# @exitcode 0 The prompt was received.
+# @description Wait for the prompt and the line editor's readiness acknowledgement.
+# @exitcode 0 The prompt was received and the line editor is ready.
 # @exitcode 1 The shell exited or did not reach its prompt.
 function wait_for_session_prompt() {
   local output= chunk
@@ -153,8 +153,8 @@ function wait_for_session_prompt() {
   for attempt in {1..500}; do
     if zpty -r -t ref-fresh-test chunk; then
       output+="$chunk"
-      [[ "$output" == *'REF_FRESH_TEST_PROMPT> '* && -s "$REF_FRESH_TEST_STATE" ]] && return 0
     fi
+    [[ "$output" == *'REF_FRESH_TEST_PROMPT> '* && -s "$REF_FRESH_TEST_STATE" ]] && return 0
     zselect -t 1 || true
   done
   fail "test shell did not reach its prompt: $output"
@@ -176,8 +176,9 @@ function start_test_session() {
   zpty -w ref-fresh-test 'if (( REF_FRESH_TEST_HUP_TRAP )); then trap '\''print -r -- user-hup > "$REF_FRESH_TEST_TRAP_LOG"'\'' HUP; fi'
   zpty -w ref-fresh-test 'REF_FRESH_AUTO_START=1; source "$REF_FRESH_TEST_PLUGIN"'
   zpty -w ref-fresh-test 'test_exit() { print -r -- "$__ref_fresh_pid:$__ref_fresh_events_fd:$__ref_fresh_root" > "$REF_FRESH_TEST_EXIT"; }; add-zsh-hook zshexit test_exit'
+  zpty -w ref-fresh-test 'test_line_init() { print -r -- "$$ $__ref_fresh_pid" > "$REF_FRESH_TEST_STATE"; }; zle -N zle-line-init test_line_init'
   # Split the marker so echoed input cannot be mistaken for the actual prompt.
-  zpty -w ref-fresh-test 'print -r -- "$$ $__ref_fresh_pid" > "$REF_FRESH_TEST_STATE"; PROMPT="REF_FRESH_TEST_""PROMPT> "; RPROMPT='
+  zpty -w ref-fresh-test ': > "$REF_FRESH_TEST_STATE"; PROMPT="REF_FRESH_TEST_""PROMPT> "; RPROMPT='
   wait_for_session_prompt
   IFS=' ' read -r session_shell_pid session_watcher_pid < "$REF_FRESH_TEST_STATE" || fail "could not read session PIDs"
   (( session_shell_pid > 0 && session_watcher_pid > 0 )) || fail "session PIDs not set"
@@ -446,6 +447,11 @@ for signal in INT TERM QUIT; do
   start_test_session
   command rm -- "$REF_FRESH_TEST_STATE"
   kill -"$signal" "$session_shell_pid"
+  if [[ "$signal" == INT ]]; then
+    # SIGINT can discard input while ZLE restarts; wait before typing again.
+    wait_for_session_prompt
+    command rm -- "$REF_FRESH_TEST_STATE"
+  fi
   zpty -w ref-fresh-test 'print -r -- "$$ $__ref_fresh_pid" > "$REF_FRESH_TEST_STATE"'
   wait_for_session_prompt
   zpty -t ref-fresh-test || fail "$signal terminated the interactive shell"
