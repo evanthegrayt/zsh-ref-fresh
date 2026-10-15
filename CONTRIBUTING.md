@@ -89,6 +89,9 @@ moving to a different repository.
 9. `__ref_fresh_on_event` drains pending events and calls `zle .reset-prompt`.
 10. `zshexit` cleanup stops the watcher and closes the FIFO descriptor.
 
+Watcher shutdown sends `TERM`, polls for up to half a second, and sends `KILL`
+if the disowned watcher is still running. Startup failure uses the same cleanup.
+
 The exit hook also runs when zsh handles `SIGHUP`, as on terminal closure.
 At an idle interactive prompt, `SIGINT` interrupts input, while `SIGTERM` and
 `SIGQUIT` are normally ignored; the watcher should remain active. Keep cleanup
@@ -184,6 +187,7 @@ The smoke test covers:
 - same-repository watcher reuse
 - stopping after leaving a repository
 - replacing the watcher after switching repositories
+- terminating a watcher that ignores `TERM` on explicit stop, Ctrl-D, and `SIGHUP`
 - Ctrl-D and explicit exit at an interactive prompt
 - `SIGHUP` and pseudo-terminal closure cleanup
 - preserving the shell and watcher after `SIGINT`, `SIGTERM`, and `SIGQUIT`

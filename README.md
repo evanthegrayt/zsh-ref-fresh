@@ -143,6 +143,11 @@ directory, starts a watcher when you enter a Git worktree, reuses the active
 watcher while you move inside the same worktree, and stops the watcher when you
 leave the repository.
 
+The watcher also stops when zsh exits normally, including Ctrl-D at an empty
+prompt. Cleanup sends `TERM`, allows up to half a second for the watcher to
+exit, and sends `KILL` if it is still running. Forced shell termination such as
+`kill -KILL` cannot run the exit hook.
+
 ## Use In A Prompt
 
 Ref Fresh does not include Git prompt rendering code, and it does not pass branch
